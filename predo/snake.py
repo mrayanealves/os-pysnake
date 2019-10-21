@@ -13,13 +13,14 @@ own_snake_id = ""
 list_snake = []
 list_snack = []
 
+global lastKey
 
 class Cube(object):
     rows = 20
     w = 500
 
     def __init__(self, pos, dirnx=1, dirny=0, color=(255, 255, 255)):
-        self.pos = pos
+        self.pos = tuple(pos)
         self.dirnx = 1
         self.dirny = 0
         self.color = color
@@ -183,9 +184,10 @@ def recvMsg(socket1, surface):
         mensagem = msg.decode("utf-8")
         comandos = mensagem.split(';')
         if (comandos[0]== "move"):
-            list_snake[comandos[1]].move(comandos[2])
+            if comandos[2] != 'none':
+                list_snake[int(comandos[1])].move(comandos[2])
         elif (comandos[0]== "eat"):
-            list_snake[comandos[1]].addCube()
+            list_snake[int(comandos[1])].addCube()
         if not msg:
             break
 
@@ -199,7 +201,7 @@ def main():
     rows = 20
 
     socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket1.connect(("localhost", 5551))
+    socket1.connect(("localhost", 5552))
 
     msg = socket1.recv(1024).decode("utf-8")
     list_msg = msg.split(';')
@@ -235,8 +237,10 @@ def main():
     print("thread criada")
     t.start()
    
+
+    lastKey = "none"
+
     while flag:
-        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -244,13 +248,21 @@ def main():
             keys = pygame.key.get_pressed()
 
             for key in keys:
-                if keys[pygame.K_LEFT]:
+                if keys[pygame.K_LEFT] and lastKey != "left":
+                    lastKey = "left"
+                    socket1.sendall(("move;" + own_snake_id + ";left").encode())
 
-                elif keys[pygame.K_RIGHT]:
+                elif keys[pygame.K_RIGHT] and lastKey != "right":
+                    lastKey = "right"
+                    socket1.sendall(("move;" + own_snake_id + ";right").encode())
 
-                elif keys[pygame.K_UP]:
+                elif keys[pygame.K_UP] and lastKey != "up":
+                    lastKey = "up"
+                    socket1.sendall(("move;" + own_snake_id + ";up").encode())
 
-                elif keys[pygame.K_DOWN]:
+                elif keys[pygame.K_DOWN] and lastKey != "down":
+                    lastKey = "down"
+                    socket1.sendall(("move;" + own_snake_id + ";down").encode())
     pass
 
 
