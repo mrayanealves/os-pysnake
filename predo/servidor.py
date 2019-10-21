@@ -51,27 +51,27 @@ class snake(object):
         global receber_direcoes
    
         keys = receber_direcoes
-        if not keys: # caso não tiver conectado com a outra cobra -> ele não se move
+        if not keys:
             return
 
         print("keys: " + keys)
 
-        if keys == "2e":
+        if keys == "e":
             self.dirnx = -1
             self.dirny = 0
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
-        elif keys == "2d":
+        elif keys == "d":
             self.dirnx = 1
             self.dirny = 0
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
-        elif keys == "2c":
+        elif keys == "c":
             self.dirnx = 0
             self.dirny = -1
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
-        elif keys == "2b":
+        elif keys == "b":
             self.dirnx = 0
             self.dirny = 1
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
@@ -144,10 +144,17 @@ def randomSnack(rows, item):
     return (x, y)
 
 def tratarCliente(clientsocket, adress):
-    
+    global receber_direcoes
     while True:
         msg_cliente = clientsocket.recv(1024).decode("utf-8") 
-
+        comando = msg_cliente.split(';')
+        if comando[1]== "move":
+            if comando [0] == '1':
+                receber_direcoes = comando[2]
+                s1.move()
+            else:
+                receber_direcoes = comando[2]
+                s2.move()
         for i in range(0,len(lista_sockets)):
             if(adress != lista_adresses[i]): 
                 lista_sockets[i].send(bytes(msg_cliente,"utf-8"))        
@@ -168,9 +175,9 @@ s.bind(("localhost",5556))
 print("Escutando...")
 s.listen(2)
 
-list_snake = []
-s1 = snake((255, 0, 250), (10, 11))
-s2 = snake((0, 255, 0), (10, 10))
+# list_snake = []
+s1 = snake((255, 0, 250), (10, 10))
+s2 = snake((0, 255, 0), (10, 11))
 
 while True:
     clientsocket, adress = s.accept()
