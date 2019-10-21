@@ -7,6 +7,8 @@ import pygame
 import tkinter as tk
 from tkinter import messagebox
 import queue
+import json
+
 class cube(object):
     rows = 20
     w = 500
@@ -36,13 +38,17 @@ class cube(object):
             pygame.draw.circle(surface, (255, 255, 255), circleMiddle, radius)
             pygame.draw.circle(surface, (255, 255, 255), circleMiddle2, radius)
 
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__)
+
 class snake(object):
-    body = []
+    
     turns = {}
 
     def __init__(self, color, pos):
         self.color = color
         self.head = cube(pos,color=color)
+        self.body =[]
         self.body.append(self.head)
         self.dirnx = 0
         self.dirny = 1
@@ -51,7 +57,7 @@ class snake(object):
         global receber_direcoes
    
         keys = receber_direcoes
-        if not keys: # caso não tiver conectado com a outra cobra -> ele não se move
+        if not keys: 
             return
 
         print("keys: " + keys)
@@ -129,6 +135,9 @@ class snake(object):
             else:
                 c.draw(surface)
 
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__)
+
 def randomSnack(rows, item):
 
     positions = item.body
@@ -164,21 +173,44 @@ lista_sockets = []
 lista_adresses = []
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
-s.bind(("localhost",5556))
+s.bind(("localhost",5551))
 print("Escutando...")
 s.listen(2)
 
 list_snake = []
-s1 = snake((255, 0, 250), (10, 11))
-s2 = snake((0, 255, 0), (10, 10))
+list_snack = []
 
 while True:
     clientsocket, adress = s.accept()
     print("Servidor recebeu concexao de {}".format(adress))
+    list_snake.append(snake((255, 0, 250), (10, 11)))
+    list_snack.append(cube(randomSnack(200, list_snake[0]), color=(0, 255, 0)))
+
     lista_sockets.append(clientsocket)
     lista_adresses.append(adress)
-    msg_cliente = "0;"+"create;"+str(s1.head.pos[0])+";"+str(s1.head.pos[0])+";"+str(s2.head.pos[0])+";"+str(s2.head.pos[0])    
-    clientsocket.send(bytes(msg_cliente,"utf-8"))
+
+    msg_snakes = "start;"+"snakes"
+
+    for snake in list_snake:
+        msg_snakes += ";" + snake.toJSON()
+
+    print(msg_snakes)
+
+    clientsocket.sendall(bytes(msg_snakes,"utf-8"))
+    clientsocket.recv(1024).decode("utf-8")
+    msg_snacks = "start;"+"snacks"
+
+    for snacks in list_snack:
+        msg_snacks += ";" + snacks.toJSON()
+
+    clientsocket.sendall(bytes(msg_snacks,"utf-8"))
+    print(msg_snacks)
+    clientsocket.recv(1024).decode("utf-8")
+    msg_id = "start;id;"+ str(len(list_snake) - 1)
+
+    print(msg_id)
+    clientsocket.sendall(bytes(msg_id,"utf-8"))
+    
     t = threading.Thread(target=tratarCliente,args=(clientsocket, adress))
     t.daemon = True # vai acabar a thread quando fecharmos o programa
     t.start()

@@ -132,6 +132,7 @@ class snake(object):
         self.body[-1].dirny = dy
 
     def draw(self, surface):
+        print(enumerate(self.body))
         for i, c in enumerate(self.body):
             if i == 0:
                 c.draw(surface, True)
@@ -293,7 +294,7 @@ def main():
     global receber_direcoes
 
     socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket1.connect(("localhost", 5556))
+    socket1.connect(("localhost", 5559))
     msg = socket1.recv(1024).decode("utf-8")
     list_msg = msg.split(';')
     if list_msg[0]== "0":
