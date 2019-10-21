@@ -62,22 +62,22 @@ class snake(object):
 
         print("keys: " + keys)
 
-        if keys == "2e":
+        if keys == "e":
             self.dirnx = -1
             self.dirny = 0
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
-        elif keys == "2d":
+        elif keys == "d":
             self.dirnx = 1
             self.dirny = 0
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
-        elif keys == "2c":
+        elif keys == "c":
             self.dirnx = 0
             self.dirny = -1
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
-        elif keys == "2b":
+        elif keys == "b":
             self.dirnx = 0
             self.dirny = 1
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
@@ -153,10 +153,17 @@ def randomSnack(rows, item):
     return (x, y)
 
 def tratarCliente(clientsocket, adress):
-    
+    global receber_direcoes
     while True:
         msg_cliente = clientsocket.recv(1024).decode("utf-8") 
-
+        comando = msg_cliente.split(';')
+        if comando[1]== "move":
+            if comando [0] == '1':
+                receber_direcoes = comando[2]
+                s1.move()
+            else:
+                receber_direcoes = comando[2]
+                s2.move()
         for i in range(0,len(lista_sockets)):
             if(adress != lista_adresses[i]): 
                 lista_sockets[i].send(bytes(msg_cliente,"utf-8"))        
