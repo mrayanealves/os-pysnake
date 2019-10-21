@@ -15,6 +15,9 @@ list_snack = []
 
 global lastKey
 
+rows = 20
+w = 500
+
 class Cube(object):
     rows = 20
     w = 500
@@ -47,10 +50,9 @@ class Cube(object):
         return json.dumps(self, default=lambda o: o.__dict__)
 
 class Snake(object):
-    
     turns = {}
 
-    def __init__(self, color, head, body, dirnx, dirny):
+    def __init__(self, color, head, body, dirnx, dirny, turns):
         # print(color, head, body, dirnx, dirny)
         self.color = color
         self.head = Cube(**json.loads(json.dumps(head)))
@@ -58,6 +60,8 @@ class Snake(object):
         self.body.append(self.head)
         self.dirnx = dirnx
         self.dirny = dirny
+        self.turns = turns
+        
 
     def move(self, direction):
         # for event in pygame.event.get():
@@ -88,22 +92,29 @@ class Snake(object):
     
         for i, c in enumerate(self.body):
             p = c.pos[:]
-            if p in self.turns:
+            walked = False
+
+            if c.dirnx == -1 and c.pos[0] <= 0:
+                c.pos = (c.rows-1, c.pos[1])
+                walked = True
+            elif c.dirnx == 1 and c.pos[0] >= c.rows-1:
+                c.pos = (0, c.pos[1])
+                walked = True
+            elif c.dirny == 1 and c.pos[1] >= c.rows-1:
+                c.pos = (c.pos[0], 0)
+                walked = True
+            elif c.dirny == -1 and c.pos[1] <= 0:
+                c.pos = (c.pos[0], c.rows-1)
+                walked = True
+            else:
+                c.move(c.dirnx, c.dirny)
+                walked = True
+
+            if p in self.turns and not walked:
                 turn = self.turns[p]
                 c.move(turn[0], turn[1])
                 if i == len(self.body)-1:
                     self.turns.pop(p)
-            else:
-                if c.dirnx == -1 and c.pos[0] <= 0:
-                    c.pos = (c.rows-1, c.pos[1])
-                elif c.dirnx == 1 and c.pos[0] >= c.rows-1:
-                    c.pos = (0, c.pos[1])
-                elif c.dirny == 1 and c.pos[1] >= c.rows-1:
-                    c.pos = (c.pos[0], 0)
-                elif c.dirny == -1 and c.pos[1] <= 0:
-                    c.pos = (c.pos[0], c.rows-1)
-                else:
-                    c.move(c.dirnx, c.dirny)
         
     def reset(self, pos):
         self.head = Cube(pos)
@@ -178,6 +189,7 @@ def message_box(subject, content):
 
 def recvMsg(socket1, surface):
     while True:
+        redrawWindow(surface)
         msg = socket1.recv(1024)
 
         # print(msg.decode("utf-8"))
@@ -191,8 +203,6 @@ def recvMsg(socket1, surface):
         if not msg:
             break
 
-        redrawWindow(surface)
-
 def main():
     global width, rows
     global receber_direcoes , list_snake, list_snack, own_snake_id
@@ -201,7 +211,7 @@ def main():
     rows = 20
 
     socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket1.connect(("localhost", 5552))
+    socket1.connect(("localhost", 5551))
 
     msg = socket1.recv(1024).decode("utf-8")
     list_msg = msg.split(';')

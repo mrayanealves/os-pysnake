@@ -14,7 +14,7 @@ lista_sockets = []
 lista_adresses = []
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
-s.bind(("localhost",5552))
+s.bind(("localhost",5551))
 print("Escutando...")
 s.listen(2)
 
@@ -27,7 +27,7 @@ class Cube(object):
     w = 500
 
     def __init__(self, start, dirnx=1, dirny=0, color=(255, 255, 255)):
-        self.pos = start
+        self.pos = tuple(start)
         self.dirnx = 1
         self.dirny = 0
         self.color = color
@@ -65,6 +65,7 @@ class Snake(object):
         self.body.append(self.head)
         self.dirnx = 0
         self.dirny = 1
+        self.turns = {}
 
     def move(self, direction):
         if direction == "left":
@@ -182,7 +183,8 @@ def moverClientes():
         clock.tick(10)
         
         for i in range(0,len(lista_sockets)):
-            lista_sockets[i].send(bytes("move;" + str(i) + ";" + str(last_movement_snake[i]), "utf-8"))
+            for j in range(0, len(list_snake)):
+                lista_sockets[i].send(bytes("move;" + str(j) + ";" + str(last_movement_snake[j]), "utf-8"))
 
 def main():
     t = threading.Thread(target=moverClientes)
