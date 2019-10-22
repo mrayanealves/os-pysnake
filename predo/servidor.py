@@ -181,7 +181,7 @@ def tratarCliente(clientsocket, adress):
         comandos = msg_cliente.split(';')
 
         if comandos[0]== "move":
-            list_snake[int(comandos[1])].move(comandos[2])     
+            list_snake[int(comandos[1])].lastDirection = comandos[2]     
 
         if not msg_cliente: 
             clientsocket.close()  
@@ -238,7 +238,7 @@ def main():
     t = threading.Thread(target=criarSnacks)
     t.daemon = True # vai acabar a thread quando fecharmos o programa
     t.start()
-    
+
     while True:
         clientsocket, adress = s.accept()
         print("Servidor recebeu concexao de {}".format(adress))
