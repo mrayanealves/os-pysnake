@@ -13,8 +13,6 @@ own_snake_id = ""
 list_snake = []
 list_snack = []
 
-global lastKey
-
 rows = 20
 w = 500
 
@@ -52,7 +50,7 @@ class Cube(object):
 class Snake(object):
     turns = {}
 
-    def __init__(self, color, head, body, dirnx, dirny, turns):
+    def __init__(self, color, head, body, dirnx, dirny, lastDirection):
         # print(color, head, body, dirnx, dirny)
         self.color = color
         self.head = Cube(**json.loads(json.dumps(head)))
@@ -60,61 +58,51 @@ class Snake(object):
         self.body.append(self.head)
         self.dirnx = dirnx
         self.dirny = dirny
-        self.turns = turns
-        
+        self.lastDirection = 'none'
 
     def move(self, direction):
-        # for event in pygame.event.get():
-        #     if event.type == pygame.QUIT:
-        #         pygame.quit()
-
-        #     keys = pygame.key.get_pressed()
-
+        if direction == "none":
+            return
+            
         if direction == "left":
             self.dirnx = -1
             self.dirny = 0
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
         elif direction == "right":
             self.dirnx = 1
             self.dirny = 0
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
         elif direction == "up":
             self.dirnx = 0
             self.dirny = -1
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
         elif direction == "down":
             self.dirnx = 0
             self.dirny = 1
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
     
+        if direction != self.lastDirection:
+            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
+            self.lastDirection = direction
+
         for i, c in enumerate(self.body):
             p = c.pos[:]
-            walked = False
 
-            if c.dirnx == -1 and c.pos[0] <= 0:
-                c.pos = (c.rows-1, c.pos[1])
-                walked = True
-            elif c.dirnx == 1 and c.pos[0] >= c.rows-1:
-                c.pos = (0, c.pos[1])
-                walked = True
-            elif c.dirny == 1 and c.pos[1] >= c.rows-1:
-                c.pos = (c.pos[0], 0)
-                walked = True
-            elif c.dirny == -1 and c.pos[1] <= 0:
-                c.pos = (c.pos[0], c.rows-1)
-                walked = True
-            else:
-                c.move(c.dirnx, c.dirny)
-                walked = True
-
-            if p in self.turns and not walked:
+            if p in self.turns:
                 turn = self.turns[p]
                 c.move(turn[0], turn[1])
                 if i == len(self.body)-1:
                     self.turns.pop(p)
+            else:
+                if c.dirnx == -1 and c.pos[0] <= 0:
+                    c.pos = (c.rows-1, c.pos[1])
+                elif c.dirnx == 1 and c.pos[0] >= c.rows-1:
+                    c.pos = (0, c.pos[1])
+                elif c.dirny == 1 and c.pos[1] >= c.rows-1:
+                    c.pos = (c.pos[0], 0)
+                elif c.dirny == -1 and c.pos[1] <= 0:
+                    c.pos = (c.pos[0], c.rows-1)
+                else:
+                    c.move(c.dirnx, c.dirny)
         
     def reset(self, pos):
         self.head = Cube(pos)
@@ -189,19 +177,37 @@ def message_box(subject, content):
 
 def recvMsg(socket1, surface):
     while True:
-        redrawWindow(surface)
         msg = socket1.recv(1024)
 
         # print(msg.decode("utf-8"))
-        mensagem = msg.decode("utf-8")
-        comandos = mensagem.split(';')
-        if (comandos[0]== "move"):
-            if comandos[2] != 'none':
-                list_snake[int(comandos[1])].move(comandos[2])
-        elif (comandos[0]== "eat"):
-            list_snake[int(comandos[1])].addCube()
-        if not msg:
-            break
+        mensagemCompleta = msg.decode("utf-8")
+        mensagens = mensagemCompleta.split('\0')
+
+        for mensagem in mensagens[:-1]:
+            comandos = mensagem.split(';')
+            if (comandos[0]== "move"):
+                if comandos[2] != 'none':
+                    list_snake[int(comandos[1])].move(comandos[2])
+
+                redrawWindow(surface)
+            elif (comandos[0]== "snack"):
+                list_snack.append(Cube(**json.loads(comandos[1])))
+
+                redrawWindow(surface)
+            elif (comandos[0]== "eat"):
+                list_snake[int(comandos[1])].addCube()
+                print(comandos)
+                list_snack.pop(int(comandos[2]))
+
+                redrawWindow(surface)
+            elif (comandos[0] == "new_client"):
+                list_snake.insert(int(comandos[1]), Snake(**json.loads(comandos[2])))
+                redrawWindow(surface)
+            elif (comandos[0] == "disconnect"):
+                list_snake.pop(int(comandos[1]))
+                redrawWindow(surface)
+            if not msg:
+                break
 
 def main():
     global width, rows
@@ -211,7 +217,7 @@ def main():
     rows = 20
 
     socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket1.connect(("localhost", 5551))
+    socket1.connect(("localhost", 5552))
 
     msg = socket1.recv(1024).decode("utf-8")
     list_msg = msg.split(';')
@@ -226,7 +232,8 @@ def main():
 
     if list_msg[0] == "start" and list_msg[1] == "snacks":
         for snack in list_msg[2:]:
-            list_snack.append(Cube((10,10)))
+            list_snack.append(Cube(**json.loads(snack)))
+
     socket1.sendall(b"ok")
     msg = socket1.recv(1024).decode("utf-8")
     list_msg = msg.split(';')
@@ -235,20 +242,16 @@ def main():
         own_snake_id = list_msg[2]
 
     surface = pygame.display.set_mode((width, width))
+    t = threading.Thread(target=recvMsg, args=(socket1,surface))
+    t.daemon = True  
+    print("thread criada")
+    t.start()
     # s = snake((255, 0, 250), (10, 10))
     # s2 = snake2((0, 255, 0), (10, 11))
     # snack = cube(randomSnack(rows, s), color=(0, 255, 0))
     flag = True
 
-    clock = pygame.time.Clock()
-
-    t = threading.Thread(target=recvMsg, args=(socket1,surface))
-    t.daemon = True  
-    print("thread criada")
-    t.start()
-   
-
-    lastKey = "none"
+    lastKey = 'none'
 
     while flag:
         for event in pygame.event.get():
@@ -257,7 +260,9 @@ def main():
 
             keys = pygame.key.get_pressed()
 
-            for key in keys:
+            if len(keys) > 0 and len(list_snake) > 1:
+                key = keys[0]
+
                 if keys[pygame.K_LEFT] and lastKey != "left":
                     lastKey = "left"
                     socket1.sendall(("move;" + own_snake_id + ";left").encode())

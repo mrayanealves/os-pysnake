@@ -14,13 +14,12 @@ lista_sockets = []
 lista_adresses = []
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
-s.bind(("localhost",5551))
+s.bind(("localhost",5552))
 print("Escutando...")
 s.listen(2)
 
 list_snake = []
 list_snack = []
-last_movement_snake = []
 
 class Cube(object):
     rows = 20
@@ -65,28 +64,31 @@ class Snake(object):
         self.body.append(self.head)
         self.dirnx = 0
         self.dirny = 1
-        self.turns = {}
+        self.lastDirection = 'none'
 
     def move(self, direction):
+        if direction == "none":
+            return
+
         if direction == "left":
             self.dirnx = -1
             self.dirny = 0
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
         elif direction == "right":
             self.dirnx = 1
             self.dirny = 0
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
         elif direction == "up":
             self.dirnx = 0
             self.dirny = -1
-            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
 
         elif direction == "down":
             self.dirnx = 0
             self.dirny = 1
+    
+        if direction != self.lastDirection:
             self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
+            self.lastDirection = direction
 
         for i, c in enumerate(self.body):
             p = c.pos[:]
@@ -106,6 +108,18 @@ class Snake(object):
                     c.pos = (c.pos[0], c.rows-1)
                 else:
                     c.move(c.dirnx, c.dirny)
+
+                
+        global list_snack, list_snake, lista_sockets
+
+        for i in range(0, len(list_snack)):
+            if list_snack[i].pos[0] == self.head.pos[0] and list_snack[i].pos[1] == self.head.pos[1]:
+                self.addCube()
+                list_snack.pop(i)
+
+                for k in range (0, len(lista_sockets)):
+                    moveMsg = "eat;" + str(list_snake.index(self)) + ";" + str(i) + "\0"
+                    lista_sockets[k].sendall(moveMsg.encode())
 
     def reset(self, pos):
         self.head = Cube(pos)
@@ -143,13 +157,15 @@ class Snake(object):
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__)
 
-def randomSnack(rows, item):
-
-    positions = item.body
+def randomSnack(rows, items):
+    positions = []
+    
+    for item in items:
+        positions.extend(item.body)
 
     while True:
-        x = random.randrange(rows)
-        y = random.randrange(rows)
+        x = random.randrange(0, rows)
+        y = random.randrange(0, rows)
         if len(list(filter(lambda z: z.pos == (x, y), positions))) > 0:
             continue
         else:
@@ -158,47 +174,75 @@ def randomSnack(rows, item):
     return (x, y)
 
 def tratarCliente(clientsocket, adress):
+    global lista_sockets, list_snake
+
     while True:
         msg_cliente = clientsocket.recv(1024).decode("utf-8") 
         comandos = msg_cliente.split(';')
-        print(msg_cliente)
-        if comandos[0]== "move":
-            list_snake[int(comandos[1])].move(comandos[2])
-            last_movement_snake[int(comandos[1])] = comandos[2]
 
-        for i in range(0,len(lista_sockets)):
-            lista_sockets[i].send(bytes(msg_cliente,"utf-8"))        
+        if comandos[0]== "move":
+            list_snake[int(comandos[1])].move(comandos[2])     
 
         if not msg_cliente: 
             clientsocket.close()  
+            
+            index = lista_sockets.index(clientsocket)
+
             lista_sockets.remove(clientsocket)
+            list_snake.pop(index)
+
+            if len(list_snake) < 2:
+                for snake in list_snake:
+                    snake.lastDirection = 'none'
+
+            for i in range(0, len(lista_sockets)):
+                disconnectMsg = "disconnect;" + str(index) + "\0"
+                lista_sockets[i].sendall(disconnectMsg.encode())
+
             break
 
 def moverClientes():
-    global lista_sockets
-    clock = pygame.time.Clock()
+    global lista_sockets, list_snake
 
     while True:
-        pygame.time.delay(50)
-        clock.tick(10)
+        pygame.time.delay(100)
         
-        for i in range(0,len(lista_sockets)):
+        for i in range(0, len(lista_sockets)):
             for j in range(0, len(list_snake)):
-                lista_sockets[i].send(bytes("move;" + str(j) + ";" + str(last_movement_snake[j]), "utf-8"))
+                moveMsg = "move;" + str(j) + ";" + list_snake[j].lastDirection + "\0"
+                lista_sockets[i].sendall(moveMsg.encode())
+
+        for j in range(0, len(list_snake)):
+            list_snake[j].move(list_snake[j].lastDirection)
+
+
+def criarSnacks():
+    global lista_sockets, list_snack, list_snake
+
+    while True:
+        pygame.time.delay(5000)
+
+        if len(list_snake) > 1:
+            list_snack.append(Cube(randomSnack(20, list_snake), color=(0, 255, 0)))
+            
+            for i in range(0, len(lista_sockets)):
+                snackMsg = "snack;" + list_snack[len(list_snack) -1].toJSON() + "\0"
+                lista_sockets[i].sendall(snackMsg.encode())
+
 
 def main():
     t = threading.Thread(target=moverClientes)
     t.daemon = True # vai acabar a thread quando fecharmos o programa
     t.start()
 
+    t = threading.Thread(target=criarSnacks)
+    t.daemon = True # vai acabar a thread quando fecharmos o programa
+    t.start()
+    
     while True:
         clientsocket, adress = s.accept()
         print("Servidor recebeu concexao de {}".format(adress))
-        list_snake.append(Snake((255, 0, 250), (10, 11)))
-        list_snack.append(Cube(randomSnack(200, list_snake[0]), color=(0, 255, 0)))
-
-        lista_sockets.append(clientsocket)
-        lista_adresses.append(adress)
+        list_snake.append(Snake((random.randrange(0, 255), random.randrange(0, 255), random.randrange(0, 255)), (10, 11)))
 
         msg_snakes = "start;"+"snakes"
 
@@ -222,8 +266,13 @@ def main():
         print(msg_id)
         clientsocket.sendall(bytes(msg_id,"utf-8"))
 
-        last_movement_snake.append("none")
+        for clientesConectados in lista_sockets:
+            novoClienteMsg = "new_client;" + str(len(list_snake) - 1) + ";" + list_snake[len(list_snake) - 1].toJSON() + "\0"
+            clientesConectados.sendall(bytes(novoClienteMsg, "utf-8"))
         
+        lista_sockets.append(clientsocket)
+        lista_adresses.append(adress)
+
         t = threading.Thread(target=tratarCliente,args=(clientsocket, adress))
         t.daemon = True # vai acabar a thread quando fecharmos o programa
         t.start()
