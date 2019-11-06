@@ -1,15 +1,27 @@
+import math
 import random
 import pygame
 import tkinter as tk
 from tkinter import messagebox
+import socket
+import threading
+import queue
+import json
 
+receber_direcoes = ""
+own_snake_id = ""
+list_snake = []
+list_snack = []
 
-class cube(object):
+rows = 20
+w = 500
+
+class Cube(object):
     rows = 20
     w = 500
 
-    def __init__(self, start, dirnx=1, dirny=0, color=(255, 0, 0)):
-        self.pos = start
+    def __init__(self, pos, dirnx=1, dirny=0, color=(255, 255, 255)):
+        self.pos = tuple(pos)
         self.dirnx = 1
         self.dirny = 0
         self.color = color
@@ -21,108 +33,99 @@ class cube(object):
 
     def draw(self, surface, eyes=False):
         dis = self.w // self.rows
-        i = self.pos[0]
-        j = self.pos[1]
+        i = int(self.pos[0])
+        j = int(self.pos[1])
 
-        pygame.draw.rect(surface, self.color, (i * dis + 1, j * dis + 1, dis - 2, dis - 2))
+        pygame.draw.rect(surface, self.color, (i*dis+1, j*dis+1, dis-2, dis-2))
         if eyes:
-            centre = dis // 2
+            centre = dis//2
             radius = 3
-            circleMiddle = (i * dis + centre - radius, j * dis + 8)
-            circleMiddle2 = (i * dis + dis - radius * 2, j * dis + 8)
-            pygame.draw.circle(surface, (0, 0, 0), circleMiddle, radius)
-            pygame.draw.circle(surface, (0, 0, 0), circleMiddle2, radius)
+            circleMiddle = (i*dis+centre-radius, j*dis+8)
+            circleMiddle2 = (i*dis + dis - radius*2, j*dis+8)
+            pygame.draw.circle(surface, (255, 255, 255), circleMiddle, radius)
+            pygame.draw.circle(surface, (255, 255, 255), circleMiddle2, radius)
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__)
 
+class Snake(object):
+    turns = {}
 
-class snake(object):
-    def __init__(self, color, pos):
-        self.body = []
-        self.turns = {}
+    def __init__(self, color, head, body, dirnx, dirny, lastDirection):
+        # print(color, head, body, dirnx, dirny)
         self.color = color
-        self.head = cube(pos, color=self.color)
+        self.head = Cube(**json.loads(json.dumps(head)))
+        self.body =[]
         self.body.append(self.head)
-        self.addCube()
-        self.dirnx = 0
-        self.dirny = 1
+        self.dirnx = dirnx
+        self.dirny = dirny
+        self.lastDirection = 'none'
 
-    def move(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
+    def move(self, direction):
+        if direction == "none":
+            return
+            
+        if direction == "left":
+            self.dirnx = -1
+            self.dirny = 0
 
-            keys = pygame.key.get_pressed()
+        elif direction == "right":
+            self.dirnx = 1
+            self.dirny = 0
 
-            for key in keys:
-                if keys[pygame.K_LEFT]:
-                    self.dirnx = -1
-                    self.dirny = 0
-                    self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
+        elif direction == "up":
+            self.dirnx = 0
+            self.dirny = -1
 
-                elif keys[pygame.K_RIGHT]:
-                    self.dirnx = 1
-                    self.dirny = 0
-                    self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
-
-                elif keys[pygame.K_UP]:
-                    self.dirnx = 0
-                    self.dirny = -1
-                    self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
-
-                elif keys[pygame.K_DOWN]:
-                    self.dirnx = 0
-                    self.dirny = 1
-                    self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
+        elif direction == "down":
+            self.dirnx = 0
+            self.dirny = 1
+    
+        if direction != self.lastDirection:
+            self.turns[self.head.pos[:]] = [self.dirnx, self.dirny]
+            self.lastDirection = direction
 
         for i, c in enumerate(self.body):
             p = c.pos[:]
+
             if p in self.turns:
                 turn = self.turns[p]
                 c.move(turn[0], turn[1])
-                if i == len(self.body) - 1:
+                if i == len(self.body)-1:
                     self.turns.pop(p)
             else:
                 if c.dirnx == -1 and c.pos[0] <= 0:
-                    c.pos = (c.rows - 1, c.pos[1])
-                elif c.dirnx == 1 and c.pos[0] >= c.rows - 1:
+                    c.pos = (c.rows-1, c.pos[1])
+                elif c.dirnx == 1 and c.pos[0] >= c.rows-1:
                     c.pos = (0, c.pos[1])
-                elif c.dirny == 1 and c.pos[1] >= c.rows - 1:
+                elif c.dirny == 1 and c.pos[1] >= c.rows-1:
                     c.pos = (c.pos[0], 0)
                 elif c.dirny == -1 and c.pos[1] <= 0:
-                    c.pos = (c.pos[0], c.rows - 1)
+                    c.pos = (c.pos[0], c.rows-1)
                 else:
                     c.move(c.dirnx, c.dirny)
-
+        
     def reset(self, pos):
-        # Transformando o corpo da cobra em comida
-        global snacks
-        self.addCube()
-        corpse = self.body
-
-        self.head = cube(pos)
+        self.head = Cube(pos)
         self.body = []
         self.body.append(self.head)
-        self.addCube()
-        self.addCube()
         self.turns = {}
         self.dirnx = 0
         self.dirny = 1
 
-        # Adicionando a comida ao corpo da cobra
-        for c in corpse:
-            snacks.append(cube(c.pos, color=(0, 255, 0)))
-
     def addCube(self):
+        cor = self.color
+
         tail = self.body[-1]
         dx, dy = tail.dirnx, tail.dirny
 
         if dx == 1 and dy == 0:
-            self.body.append(cube((tail.pos[0] - 1, tail.pos[1]), color=self.color))
+            self.body.append(Cube((tail.pos[0]-1, tail.pos[1]), color=cor))
         elif dx == -1 and dy == 0:
-            self.body.append(cube((tail.pos[0] + 1, tail.pos[1]), color=self.color))
+            self.body.append(Cube((tail.pos[0]+1, tail.pos[1]), color=cor))
         elif dx == 0 and dy == 1:
-            self.body.append(cube((tail.pos[0], tail.pos[1] - 1), color=self.color))
+            self.body.append(Cube((tail.pos[0], tail.pos[1]-1), color=cor))
         elif dx == 0 and dy == -1:
-            self.body.append(cube((tail.pos[0], tail.pos[1] + 1), color=self.color))
+            self.body.append(Cube((tail.pos[0], tail.pos[1]+1), color=cor))
 
         self.body[-1].dirnx = dx
         self.body[-1].dirny = dy
@@ -133,32 +136,17 @@ class snake(object):
                 c.draw(surface, True)
             else:
                 c.draw(surface)
-
-
-def drawGrid(w, rows, surface):
-    sizeBtwn = w // rows
-
-    x = 0
-    y = 0
-    for l in range(rows):
-        x = x + sizeBtwn
-        y = y + sizeBtwn
-
-        pygame.draw.line(surface, (0, 0, 0), (x, 0), (x, w))
-        pygame.draw.line(surface, (0, 0, 0), (0, y), (w, y))
-
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__)
 
 def redrawWindow(surface):
-    global rows, width, snakes, snacks
+    global rows, width, list_snake, list_snack
     surface.fill((0, 0, 0))
-
-    for s in snakes:
-        s.draw(surface)
-
-    for s in snacks:
-        s.draw(surface)
-
-    drawGrid(width, rows, surface)
+    for snack in list_snack:
+        snack.draw(surface)
+    for snake in list_snake:
+        snake.draw(surface)
+    #drawGrid(width, rows, surface)
     pygame.display.update()
 
 
@@ -172,6 +160,7 @@ def randomSnack(rows, item):
             continue
         else:
             break
+
     return (x, y)
 
 
@@ -186,64 +175,111 @@ def message_box(subject, content):
         pass
 
 
-def main():
-    global width, rows, snakes, snacks
-    width = 500
-    rows = 20
-    win = pygame.display.set_mode((width, width))
+def recvMsg(socket1, surface):
+    while True:
+        msg = socket1.recv(1024)
 
-    snakes = []
-    snakes.append(snake((255, 0, 0), (10, 10)))
-    snakes.append(snake((0, 0, 255), (11, 11)))
+        # print(msg.decode("utf-8"))
+        mensagemCompleta = msg.decode("utf-8")
+        mensagens = mensagemCompleta.split('\0')
 
-    snacks = []
-    snacks.append(cube(randomSnack(rows, snakes[0]), color=(0, 255, 0)))
+        for mensagem in mensagens[:-1]:
+            comandos = mensagem.split(';')
+            if (comandos[0]== "move"):
+                if comandos[2] != 'none':
+                    list_snake[int(comandos[1])].move(comandos[2])
 
-    flag = True
-    clock = pygame.time.Clock()
+                redrawWindow(surface)
+            elif (comandos[0]== "snack"):
+                list_snack.append(Cube(**json.loads(comandos[1])))
 
-    spawnSnack = False
-    snackTime = 0
+                redrawWindow(surface)
+            elif (comandos[0]== "eat"):
+                list_snake[int(comandos[1])].addCube()
+                print(comandos)
+                list_snack.pop(int(comandos[2]))
 
-    # Game loop
-    while flag:
-        # Fix FPS
-        pygame.time.delay(50)
-        clock.tick(10)
-
-        for s in snakes:
-            # Snakes moves
-            s.move()
-
-            # If snake eats a snack
-            if s.body[0].pos in list(map(lambda z: z.pos, snacks)):
-                snackTime = pygame.time.get_ticks()
-
-                s.addCube()
-                for sn in snacks:
-                    if (sn.pos == s.body[0].pos):
-                        snacks.remove(sn)
-
-        if len(snacks) == 0:
-            spawnSnack = True
-
-        # If it has to spawn a snack
-        if spawnSnack:
-            if pygame.time.get_ticks() - snackTime >= 500:
-                snacks.append(cube(randomSnack(rows, snakes[0]), color=(0, 255, 0)))
-                spawnSnack = False
-
-        for x in range(len(snakes[0].body)):
-            if snakes[0].body[x].pos in list(map(lambda z: z.pos, snakes[0].body[x + 1:])):
-                print('Score: ', len(snakes[0].body))
-                message_box('You Lost!', 'Play again...')
-                snakes[0].reset((10, 10))
+                redrawWindow(surface)
+            elif (comandos[0] == "new_client"):
+                list_snake.insert(int(comandos[1]), Snake(**json.loads(comandos[2])))
+                redrawWindow(surface)
+            elif (comandos[0] == "disconnect"):
+                list_snake.pop(int(comandos[1]))
+                redrawWindow(surface)
+            if not msg:
                 break
 
-        redrawWindow(win)
-        flag = True
+def main():
+    global width, rows
+    global receber_direcoes , list_snake, list_snack, own_snake_id
+
+    width = 500
+    rows = 20
+
+    socket1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socket1.connect(("localhost", 5552))
+
+    msg = socket1.recv(1024).decode("utf-8")
+    list_msg = msg.split(';')
+
+    if list_msg[0] == "start" and list_msg[1] == "snakes":
+        for snake in list_msg[2:]:
+            # print(**json.loads(snake))
+            list_snake.append(Snake(**json.loads(snake)))
+    socket1.sendall(b"ok")
+    msg1 = socket1.recv(1024).decode("utf-8")
+    list_msg = msg1.split(';')
+
+    if list_msg[0] == "start" and list_msg[1] == "snacks":
+        for snack in list_msg[2:]:
+            list_snack.append(Cube(**json.loads(snack)))
+
+    socket1.sendall(b"ok")
+    msg = socket1.recv(1024).decode("utf-8")
+    list_msg = msg.split(';')
+
+    if list_msg[0] == "start" and list_msg[1] == "id":
+        own_snake_id = list_msg[2]
+
+    surface = pygame.display.set_mode((width, width))
+    t = threading.Thread(target=recvMsg, args=(socket1,surface))
+    t.daemon = True  
+    print("thread criada")
+    t.start()
+    # s = snake((255, 0, 250), (10, 10))
+    # s2 = snake2((0, 255, 0), (10, 11))
+    # snack = cube(randomSnack(rows, s), color=(0, 255, 0))
+    flag = True
+
+    lastKey = 'none'
+
+    while flag:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+
+            keys = pygame.key.get_pressed()
+
+            if len(keys) > 0 and len(list_snake) > 1:
+                key = keys[0]
+
+                if keys[pygame.K_LEFT] and lastKey != "left":
+                    lastKey = "left"
+                    socket1.sendall(("move;" + own_snake_id + ";left").encode())
+
+                elif keys[pygame.K_RIGHT] and lastKey != "right":
+                    lastKey = "right"
+                    socket1.sendall(("move;" + own_snake_id + ";right").encode())
+
+                elif keys[pygame.K_UP] and lastKey != "up":
+                    lastKey = "up"
+                    socket1.sendall(("move;" + own_snake_id + ";up").encode())
+
+                elif keys[pygame.K_DOWN] and lastKey != "down":
+                    lastKey = "down"
+                    socket1.sendall(("move;" + own_snake_id + ";down").encode())
     pass
 
 
-if __name__ == '__main__':
-    main()
+
+main()
